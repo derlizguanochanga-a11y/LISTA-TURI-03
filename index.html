@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Asientos - Turismo 03 (Saldo Pendiente)</title>
+    <style>
+        :root {
+            --primary-color: #d32f2f;
+            --window-color: #2196F3;
+            --aisle-color: #4CAF50;
+            --occupied-color: #757575; /* Gris para Saldo Pendiente */
+            --paid-color: #2E7D32;     /* Verde para Pagado */
+            --bg-light: #f5f5f5;
+            --table-header: #37474F;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-light);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 900px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            text-align: center;
+            width: 100%;
+        }
+
+        /* Indicador de Estado */
+        #statusIndicator {
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            background-color: #e0e0e0;
+            color: #555;
+            transition: all 0.3s;
+        }
+        .status-live { background-color: #C8E6C9 !important; color: #2E7D32 !important; }
+        .status-view { background-color: #BBDEFB !important; color: #1976D2 !important; }
+
+        .controls {
+            margin: 20px 0;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        button {
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            color: white;
+            transition: 0.2s;
+        }
+        button:active { transform: scale(0.98); }
+
+        .btn-excel { background-color: #2E7D32; }
+        .btn-share { background-color: #FF9800; }
+        #tempCopyInput { position: absolute; left: -9999px; }
+
+        /* LEYENDA ACTUALIZADA */
+        .legend {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            font-size: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .legend-item { display: flex; align-items: center; }
+        .legend-color { width: 15px; height: 15px; margin-right: 5px; border-radius: 3px; border: 1px solid #ccc; }
+
+        /* GRID DEL BUS */
+        .bus-container {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+            max-width: 800px;
+            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr) 40px repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 40px;
+        }
+
+        .seat {
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            padding: 2px;
+            text-align: center;
+            cursor: pointer;
+            background-color: white;
+            min-height: 70px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-size: 14px;
+            transition: all 0.2s;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .seat:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            border-color: #999;
+        }
+
+        .seat[data-type*="V"] { border-color: var(--window-color); color: var(--window-color); font-weight: bold; }
+        .seat[data-type*="P"] { border-color: var(--aisle-color); color: var(--aisle-color); font-weight: bold; }
+
+        /* ESTADOS DE PAGO EN EL ASIENTO */
+        .seat.occupied {
+            background-color: var(--occupied-color) !important; /* Gris = Saldo Pendiente */
+            border-color: #424242 !important;
+            color: white !important;
+        }
+        
+        .seat.status-paid {
+            background-color: var(--paid-color) !important; /* Verde = Pagado */
+            border-color: #1B5E20 !important;
+            color: white !important;
+        }
+
+        .seat-info-small { 
+            font-size: 11px; 
+            margin-top: 2px; 
+            font-weight: normal; 
+            color: #fff; 
+            line-height: 1.1;
+            width: 100%;
+        }
+
+        /* Indicador de pago en el asiento */
+        .payment-badge {
+            font-size: 10px;
+            background: rgba(0,0,0,0.2);
+            padding: 1px 4px;
+            border-radius: 4px;
+            margin-top: 2px;
+            display: inline-block;
+        }
+
+        /* Posicionamiento específico */
+        [data-id="3VP"] { grid-column: 4 / span 2; }
+        [data-id="40V"] { grid-row-start: 12; grid-column: 1; }
+        [data-id="41P"] { grid-row-start: 12; grid-column: 2; }
+        [data-id="44P"] { grid-row-start: 12; grid-column: 3; }
+        [data-id="42P"] { grid-row-start: 12; grid-column: 4; }
+        [data-id="43V"] { grid-row-start: 12; grid-column: 5; }
+
+        /* TABLA MANIFIESTO WEB */
+        .manifest-container {
+            width: 100%;
+            max-width: 900px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            overflow-x: auto;
+        }
+
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: var(--table-header); color: white; }
+        
+        tbody tr { transition: background-color 0.2s; }
+        body:not(.view-mode) tbody tr:hover { background-color: #BBDEFB !important; cursor: pointer; }
+        tbody tr:nth-child(even) { background-color: #f9f9f9; }
+        
+        .col-seat { text-align: center; font-weight: bold; width: 50px; }
+        .col-center { text-align: center; } 
+        .col-money { text-align: center; font-weight: bold; color: #555; }
+        .hint-text { text-align: center; font-size: 12px; color: #666; margin-bottom: 5px; font-style: italic; }
+
+        /* MODAL */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            width: 320px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        }
+
+        .modal-header { font-size: 18px; font-weight: bold; margin-bottom: 15px; color: var(--primary-color); border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; margin-bottom: 4px; font-weight: 600; font-size: 13px; color: #555; }
+        .form-group input, .form-group select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+
+        /* SECCIÓN DE PAGO EN MODAL */
+        .payment-section {
+            background-color: #e3f2fd;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            border: 1px solid #90caf9;
+        }
+
+        .modal-actions { display: flex; justify-content: space-between; margin-top: 20px; gap: 10px; }
+        .btn-cancel { background-color: #757575; width: 100%; }
+        .btn-save { background-color: var(--primary-color); width: 100%; }
+        .btn-delete { background-color: #d32f2f; margin-top: 10px; width: 100%; display: none; }
+
+        /* MODO SOLO VISTA */
+        body.view-mode .controls .btn-share { display: none; }
+        body.view-mode .hint-text { display: none; }
+        body.view-mode .seat { cursor: default; }
+        body.view-mode tbody tr { cursor: default; }
+        body.view-mode .bus-container { border: 4px solid #BBDEFB; }
+
+    </style>
+</head>
+<body>
+
+    <div id="statusIndicator">Conectando con la nube...</div>
+
+    <h1 id="pageTitle">DISTRIBUCIÓN TURISMO 03</h1>
+
+    <div class="controls">
+        <button class="btn-share" id="btnShareView">👁️ Copiar Link de Solo Vista</button>
+        <button class="btn-excel" onclick="generateStrictExcel()">📊 Descargar Lista para Excel</button>
+    </div>
+    
+    <div class="legend">
+        <div class="legend-item"><div class="legend-color" style="background: var(--occupied-color)"></div>Saldo Pendiente</div>
+        <div class="legend-item"><div class="legend-color" style="background: var(--paid-color)"></div>Pagado</div>
+    </div>
+
+    <div class="bus-container" id="busGrid"></div>
+
+    <div class="manifest-container">
+        <h2 style="margin-top: 0; text-align: left; border-bottom: 2px solid var(--primary-color); padding-bottom: 10px;">📋 Lista de Pasajeros</h2>
+        <div class="hint-text">💡 Tip: Haz clic en la lista para editar.</div>
+        <table id="passengersTable">
+            <thead>
+                <tr>
+                    <th class="col-seat">No.</th>
+                    <th>Nombre y Apellido</th>
+                    <th>Nacionalidad</th>
+                    <th>Cédula</th>
+                    <th>Estado de Pago</th>
+                </tr>
+            </thead>
+            <tbody id="manifestBody"></tbody>
+        </table>
+    </div>
+
+    <div class="modal-overlay" id="seatModal">
+        <div class="modal-content">
+            <div class="modal-header">Editar Asiento <span id="modalSeatLabel"></span></div>
+            
+            <div class="form-group">
+                <label for="pFullName">Nombre y Apellido (Obligatorio):</label>
+                <input type="text" id="pFullName" placeholder="Ej: Juan Pérez">
+            </div>
+
+            <div class="form-group">
+                <label for="pNation">Nacionalidad:</label>
+                <input type="text" id="pNation" placeholder="Ej: ECUATORIANO" value="ECUATORIANO">
+            </div>
+
+            <div class="form-group">
+                <label for="pId">Número de Cédula (Opcional):</label>
+                <input type="number" id="pId" placeholder="Ej: 1700000000">
+            </div>
+
+            <div class="payment-section">
+                <div class="form-group">
+                    <label for="pPaymentStatus">Estado del Asiento:</label>
+                    <select id="pPaymentStatus" onchange="togglePaymentInputs()">
+                        <option value="pending">Saldo Pendiente</option>
+                        <option value="paid">Pagado Totalmente</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="pendingGroup" style="display:none;">
+                    <label for="pPendingAmount">Valor Saldo Pendiente ($):</label>
+                    <input type="number" id="pPendingAmount" placeholder="Ej: 10.00" step="0.50">
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-cancel" id="btnCancel">Cancelar</button>
+                <button class="btn-save" id="btnSave">Guardar</button>
+            </div>
+            <button class="btn-delete" id="btnDelete">Liberar Asiento</button>
+        </div>
+    </div>
+
+    <input type="text" id="tempCopyInput">
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getDatabase, ref, set, onValue, remove } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
+
+        // CONFIGURACIÓN FIREBASE
+        const firebaseConfig = {
+            apiKey: "AIzaSyCFBM1k8PeVFbYS5vxMTJy2G6t4lvK5KtM",
+            authDomain: "lista-turi-03.firebaseapp.com",
+            databaseURL: "https://lista-turi-03-default-rtdb.firebaseio.com",
+            projectId: "lista-turi-03",
+            storageBucket: "lista-turi-03.firebasestorage.app",
+            messagingSenderId: "776005410409",
+            appId: "1:776005410409:web:5fcdf8b8dc4bcbf62f4cf8",
+            measurementId: "G-E70M59J4JM"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const seatsRef = ref(db, 'asientos_bus_03');
+
+        // MODO VISTA
+        const urlParams = new URLSearchParams(window.location.search);
+        const isViewOnly = urlParams.get('mode') === 'view';
+
+        if (isViewOnly) {
+            document.body.classList.add('view-mode');
+            document.getElementById('pageTitle').innerText = "DISTRIBUCIÓN TURISMO 03 (Modo Espectador)";
+        }
+
+        let passengersData = {};
+        let currentSeatId = null;
+
+        const seatLayout = [
+            { id: '1V', col: 1 }, { id: '2P', col: 2 }, { id: '3VP', col: 'special' },
+            { id: '4V', col: 1 }, { id: '5P', col: 2 }, { id: '6P', col: 4 }, { id: '7V', col: 5 },
+            { id: '8V', col: 1 }, { id: '9P', col: 2 }, { id: '10P', col: 4 }, { id: '11V', col: 5 },
+            { id: '12V', col: 1 }, { id: '13P', col: 2 }, { id: '14P', col: 4 }, { id: '15V', col: 5 },
+            { id: '16V', col: 1 }, { id: '17P', col: 2 }, { id: '18P', col: 4 }, { id: '19V', col: 5 },
+            { id: '20V', col: 1 }, { id: '21P', col: 2 }, { id: '22P', col: 4 }, { id: '23V', col: 5 },
+            { id: '24V', col: 1 }, { id: '25P', col: 2 }, { id: '26P', col: 4 }, { id: '27V', col: 5 },
+            { id: '28V', col: 1 }, { id: '29P', col: 2 }, { id: '30P', col: 4 }, { id: '31V', col: 5 },
+            { id: '32V', col: 1 }, { id: '33P', col: 2 }, { id: '34P', col: 4 }, { id: '35V', col: 5 },
+            { id: '36V', col: 1 }, { id: '37P', col: 2 }, { id: '38P', col: 4 }, { id: '39V', col: 5 },
+            { id: '40V', col: 'back' }, { id: '41P', col: 'back' }, { id: '44P', col: 'back' }, { id: '42P', col: 'back' }, { id: '43V', col: 'back' }
+        ];
+
+        const busGrid = document.getElementById('busGrid');
+        const modal = document.getElementById('seatModal');
+        const statusInd = document.getElementById('statusIndicator');
+        const inpFullName = document.getElementById('pFullName');
+        const inpNation = document.getElementById('pNation');
+        const inpId = document.getElementById('pId');
+        
+        const selPaymentStatus = document.getElementById('pPaymentStatus');
+        const inpPendingAmount = document.getElementById('pPendingAmount');
+        const pendingGroup = document.getElementById('pendingGroup');
+        
+        document.getElementById('btnSave').addEventListener('click', savePassenger);
+        document.getElementById('btnDelete').addEventListener('click', deletePassenger);
+        document.getElementById('btnCancel').addEventListener('click', closeModal);
+        document.getElementById('btnShareView').addEventListener('click', copyViewLink);
+        window.generateStrictExcel = generateStrictExcel; 
+        
+        window.togglePaymentInputs = function() {
+            if (selPaymentStatus.value === 'pending') {
+                pendingGroup.style.display = 'block';
+            } else {
+                pendingGroup.style.display = 'none';
+            }
+        };
+
+        renderSeats();
+        listenToCloud();
+
+        function listenToCloud() {
+            onValue(seatsRef, (snapshot) => {
+                const data = snapshot.val();
+                passengersData = data || {}; 
+                refreshAll();
+                
+                if (isViewOnly) {
+                    statusInd.innerText = "👀 Modo Espectador - Actualizado en tiempo real";
+                    statusInd.classList.add('status-view');
+                } else {
+                    statusInd.innerText = "🟢 Conectado - Administrador en línea";
+                    statusInd.classList.add('status-live');
+                }
+            }, (error) => {
+                statusInd.innerText = "🔴 Error de conexión";
+            });
+        }
+
+        function savePassengerToCloud(seatId, data) {
+            set(ref(db, 'asientos_bus_03/' + seatId), data);
+        }
+
+        function removePassengerFromCloud(seatId) {
+            remove(ref(db, 'asientos_bus_03/' + seatId));
+        }
+
+        function renderSeats() {
+            busGrid.innerHTML = '';
+            seatLayout.forEach(seatInfo => {
+                const seatEl = document.createElement('div');
+                seatEl.className = 'seat';
+                seatEl.dataset.id = seatInfo.id;
+                
+                let type = "P";
+                if(seatInfo.id.includes('VP')) type = "VP";
+                else if(seatInfo.id.includes('V')) type = "V";
+                
+                seatEl.dataset.type = type;
+                seatEl.innerHTML = `<span style="font-weight:bold; font-size:16px;">${seatInfo.id}</span><div class="seat-info-small" id="info-${seatInfo.id}"></div>`;
+                
+                if (typeof seatInfo.col === 'number') seatEl.style.gridColumn = seatInfo.col;
+                
+                seatEl.addEventListener('click', () => {
+                    if (!isViewOnly) openModal(seatInfo.id);
+                });
+                
+                busGrid.appendChild(seatEl);
+            });
+        }
+
+        function refreshAll() {
+            document.querySelectorAll('.seat').forEach(seat => {
+                const id = seat.dataset.id;
+                const infoDiv = seat.querySelector('.seat-info-small');
+                const data = passengersData[id];
+
+                seat.classList.remove('occupied', 'status-paid');
+
+                if (data) {
+                    const firstName = data.fullName.split(' ')[0];
+                    let badgeHTML = "";
+
+                    if (data.paymentStatus === 'paid') {
+                        seat.classList.add('status-paid'); // Verde
+                        badgeHTML = `<span class="payment-badge">💲 Pagado</span>`;
+                    } else {
+                        // Pendiente (Gris)
+                        seat.classList.add('occupied');
+                        const val = data.pendingVal ? `$${data.pendingVal}` : '';
+                        // Aquí usamos "Saldo" en lugar de "Debe" para consistencia
+                        if(val) {
+                            badgeHTML = `<span class="payment-badge">Saldo: ${val}</span>`;
+                        } else {
+                            badgeHTML = `<span class="payment-badge">Saldo Pendiente</span>`;
+                        }
+                    }
+
+                    infoDiv.innerHTML = `
+                        <div style="font-weight:bold; margin-bottom:1px;">${firstName}</div>
+                        ${badgeHTML}
+                    `;
+                } else {
+                    infoDiv.innerText = "Libre";
+                }
+            });
+            renderManifestTable();
+        }
+
+        function renderManifestTable() {
+            const tbody = document.getElementById('manifestBody');
+            tbody.innerHTML = '';
+            const sortedSeats = [...seatLayout].sort((a, b) => parseInt(a.id) - parseInt(b.id));
+
+            sortedSeats.forEach(seat => {
+                const data = passengersData[seat.id];
+                const row = document.createElement('tr');
+                const seatNumber = parseInt(seat.id);
+
+                row.addEventListener('click', function() {
+                    if (!isViewOnly) openModal(seat.id);
+                });
+
+                if (data) {
+                    let payText = "";
+                    
+                    if(data.paymentStatus === 'paid') {
+                        payText = `<span style="color: green; font-weight:bold;">✅ PAGADO</span>`;
+                    } else {
+                        // Pendiente
+                        const val = data.pendingVal ? data.pendingVal : "";
+                        if(val) {
+                            payText = `<span style="color:#616161; font-weight:bold;">⚠️ Saldo: $${val}</span>`;
+                        } else {
+                             payText = `<span style="color:#616161; font-weight:bold;">⚠️ Saldo Pendiente</span>`;
+                        }
+                    }
+
+                    row.innerHTML = `
+                        <td class="col-seat" style="background:#e8f5e9">${seatNumber}</td>
+                        <td class="col-center">${data.fullName}</td>
+                        <td class="col-center">${data.nation}</td>
+                        <td class="col-center">${data.idNum || ''}</td>
+                        <td class="col-money">${payText}</td>
+                    `;
+                } else {
+                    row.innerHTML = `
+                        <td class="col-seat">${seatNumber}</td>
+                        <td colspan="4" style="color:#ccc; font-style:italic; text-align:center;">--- Disponible ---</td>
+                    `;
+                }
+                tbody.appendChild(row);
+            });
+        }
+
+        function openModal(seatId) {
+            currentSeatId = seatId;
+            document.getElementById('modalSeatLabel').innerText = seatId;
+            const btnDel = document.getElementById('btnDelete');
+
+            if (passengersData[seatId]) {
+                const p = passengersData[seatId];
+                inpFullName.value = p.fullName;
+                inpNation.value = p.nation;
+                inpId.value = p.idNum;
+                
+                selPaymentStatus.value = p.paymentStatus || 'pending';
+                inpPendingAmount.value = p.pendingVal || ''; 
+                
+                btnDel.style.display = 'block';
+            } else {
+                inpFullName.value = '';
+                inpNation.value = 'ECUATORIANO';
+                inpId.value = '';
+                selPaymentStatus.value = 'pending';
+                inpPendingAmount.value = '';
+                btnDel.style.display = 'none';
+            }
+            
+            togglePaymentInputs();
+            modal.style.display = 'flex';
+            inpFullName.focus();
+        }
+
+        function closeModal() {
+            modal.style.display = 'none';
+            currentSeatId = null;
+        }
+
+        function savePassenger() {
+            if (!inpFullName.value) {
+                alert("Por favor, ingresa el Nombre del pasajero.");
+                return;
+            }
+
+            const newData = {
+                fullName: inpFullName.value.trim(),
+                nation: inpNation.value.trim(),
+                idNum: inpId.value.trim(), 
+                paymentStatus: selPaymentStatus.value,
+                pendingVal: inpPendingAmount.value
+            };
+            
+            savePassengerToCloud(currentSeatId, newData);
+            closeModal();
+        }
+
+        function deletePassenger() {
+            if(confirm('¿Liberar asiento?')) {
+                removePassengerFromCloud(currentSeatId);
+                closeModal();
+            }
+        }
+        
+        function copyViewLink() {
+            const baseUrl = window.location.href.split('?')[0];
+            const viewUrl = `${baseUrl}?mode=view`;
+            const tempInput = document.getElementById('tempCopyInput');
+            tempInput.value = viewUrl;
+            tempInput.select();
+            document.execCommand("copy");
+            alert("¡Link de Solo Vista copiado!");
+        }
+
+        function generateStrictExcel() {
+            const sortedSeats = [...seatLayout].sort((a, b) => parseInt(a.id) - parseInt(b.id));
+            let dataRows = '';
+            
+            sortedSeats.forEach(seat => {
+                const data = passengersData[seat.id];
+                const seatNo = parseInt(seat.id); 
+                const name = data ? data.fullName : "";
+                const nation = data ? data.nation : "";
+                const idNum = data ? data.idNum : "";
+
+                dataRows += `
+                <tr style="height: 34px;">
+                    <td class="cell-center">${seatNo}</td>
+                    <td class="cell-center">${name}</td>
+                    <td class="cell-center">${nation}</td>
+                    <td class="cell-center">${idNum}</td>
+                </tr>`;
+            });
+
+            const excelTemplate = `
+            <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    body { font-family: 'Verdana', sans-serif; }
+                    td { border: 0.5pt solid black; font-family: 'Verdana', sans-serif; font-size: 7pt; vertical-align: middle; }
+                    .title-main { font-size: 11pt; font-weight: bold; text-align: center; border: none; background-color: transparent; }
+                    .title-sub { font-size: 7pt; font-weight: bold; text-align: center; border: none; background-color: #BFBFBF; }
+                    .header-cell { font-weight: bold; text-align: center; background-color: #BFBFBF; font-size: 7pt; }
+                    .cell-center { text-align: center; }
+                </style>
+            </head>
+            <body>
+                <table>
+                    <col width="70" style="width: 70px;"><col width="350" style="width: 350px;"><col width="280" style="width: 280px;"><col width="300" style="width: 300px;">
+                    <tr style="height: 34px;"><td colspan="4" class="title-main">ANEXO No.2</td></tr>
+                    <tr style="height: 34px;"><td colspan="4" class="title-sub">LISTA DE PASAJEROS</td></tr>
+                    <tr style="height: 34px;">
+                        <td class="header-cell">No</td><td class="header-cell">NOMBRE DEL PASAJERO</td>
+                        <td class="header-cell">NACIONALIDAD</td><td class="header-cell">CÉDULA/PASAPORTE</td>
+                    </tr>
+                    ${dataRows}
+                </table>
+            </body>
+            </html>`;
+
+            const blob = new Blob([excelTemplate], { type: 'application/vnd.ms-excel' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "Anexo2_ListaPasajeros.xls";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+    </script>
+</body>
+</html>
