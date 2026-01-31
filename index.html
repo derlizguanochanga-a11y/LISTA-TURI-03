@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestión de Asientos - Turismo 03 (Saldo Pendiente)</title>
+    <title>Gestión de Asientos - Turismo 03 (Completo)</title>
     <style>
         :root {
             --primary-color: #d32f2f;
@@ -77,9 +77,13 @@
 
         .btn-excel { background-color: #2E7D32; }
         .btn-share { background-color: #FF9800; }
+        /* NUEVO BOTÓN DE BORRAR */
+        .btn-reset { background-color: #b71c1c; border: 2px solid #b71c1c; }
+        .btn-reset:hover { background-color: #d32f2f; }
+
         #tempCopyInput { position: absolute; left: -9999px; }
 
-        /* LEYENDA ACTUALIZADA */
+        /* LEYENDA */
         .legend {
             display: flex;
             gap: 15px;
@@ -132,15 +136,15 @@
         .seat[data-type*="V"] { border-color: var(--window-color); color: var(--window-color); font-weight: bold; }
         .seat[data-type*="P"] { border-color: var(--aisle-color); color: var(--aisle-color); font-weight: bold; }
 
-        /* ESTADOS DE PAGO EN EL ASIENTO */
+        /* ESTADOS DE PAGO */
         .seat.occupied {
-            background-color: var(--occupied-color) !important; /* Gris = Saldo Pendiente */
+            background-color: var(--occupied-color) !important;
             border-color: #424242 !important;
             color: white !important;
         }
         
         .seat.status-paid {
-            background-color: var(--paid-color) !important; /* Verde = Pagado */
+            background-color: var(--paid-color) !important;
             border-color: #1B5E20 !important;
             color: white !important;
         }
@@ -154,7 +158,6 @@
             width: 100%;
         }
 
-        /* Indicador de pago en el asiento */
         .payment-badge {
             font-size: 10px;
             background: rgba(0,0,0,0.2);
@@ -221,7 +224,6 @@
         .form-group label { display: block; margin-bottom: 4px; font-weight: 600; font-size: 13px; color: #555; }
         .form-group input, .form-group select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
 
-        /* SECCIÓN DE PAGO EN MODAL */
         .payment-section {
             background-color: #e3f2fd;
             padding: 10px;
@@ -236,7 +238,8 @@
         .btn-delete { background-color: #d32f2f; margin-top: 10px; width: 100%; display: none; }
 
         /* MODO SOLO VISTA */
-        body.view-mode .controls .btn-share { display: none; }
+        body.view-mode .controls .btn-share,
+        body.view-mode .controls .btn-reset { display: none; } /* Ocultar botón borrar también */
         body.view-mode .hint-text { display: none; }
         body.view-mode .seat { cursor: default; }
         body.view-mode tbody tr { cursor: default; }
@@ -251,8 +254,9 @@
     <h1 id="pageTitle">DISTRIBUCIÓN TURISMO 03</h1>
 
     <div class="controls">
-        <button class="btn-share" id="btnShareView">👁️ Copiar Link de Solo Vista</button>
-        <button class="btn-excel" onclick="generateStrictExcel()">📊 Descargar Lista para Excel</button>
+        <button class="btn-share" id="btnShareView">👁️ Link Solo Vista</button>
+        <button class="btn-excel" onclick="generateStrictExcel()">📊 Descargar Excel</button>
+        <button class="btn-reset" onclick="resetAllData()">🗑️ BORRAR TODO</button>
     </div>
     
     <div class="legend">
@@ -327,7 +331,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
         import { getDatabase, ref, set, onValue, remove } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
 
-        // CONFIGURACIÓN FIREBASE
+        // TUS CLAVES FIREBASE
         const firebaseConfig = {
             apiKey: "AIzaSyCFBM1k8PeVFbYS5vxMTJy2G6t4lvK5KtM",
             authDomain: "lista-turi-03.firebaseapp.com",
@@ -369,6 +373,7 @@
             { id: '40V', col: 'back' }, { id: '41P', col: 'back' }, { id: '44P', col: 'back' }, { id: '42P', col: 'back' }, { id: '43V', col: 'back' }
         ];
 
+        // Elementos DOM
         const busGrid = document.getElementById('busGrid');
         const modal = document.getElementById('seatModal');
         const statusInd = document.getElementById('statusIndicator');
@@ -385,6 +390,7 @@
         document.getElementById('btnCancel').addEventListener('click', closeModal);
         document.getElementById('btnShareView').addEventListener('click', copyViewLink);
         window.generateStrictExcel = generateStrictExcel; 
+        window.resetAllData = resetAllData; // Exponer la función nueva
         
         window.togglePaymentInputs = function() {
             if (selPaymentStatus.value === 'pending') {
@@ -421,6 +427,21 @@
 
         function removePassengerFromCloud(seatId) {
             remove(ref(db, 'asientos_bus_03/' + seatId));
+        }
+
+        // --- NUEVA FUNCIÓN: BORRAR TODO ---
+        function resetAllData() {
+            if (confirm("⚠️ ¡ADVERTENCIA!\n\n¿Estás seguro de que quieres BORRAR TODOS los datos?\n\nSe eliminarán todos los nombres, cédulas y pagos de la lista.")) {
+                if (confirm("Confirma por segunda vez:\n¿Realmente deseas vaciar todo el bus? Esta acción no se puede deshacer.")) {
+                    remove(seatsRef)
+                    .then(() => {
+                        alert("Bus reiniciado correctamente.");
+                    })
+                    .catch((error) => {
+                        alert("Error al borrar: " + error.message);
+                    });
+                }
+            }
         }
 
         function renderSeats() {
@@ -460,13 +481,12 @@
                     let badgeHTML = "";
 
                     if (data.paymentStatus === 'paid') {
-                        seat.classList.add('status-paid'); // Verde
+                        seat.classList.add('status-paid'); 
                         badgeHTML = `<span class="payment-badge">💲 Pagado</span>`;
                     } else {
-                        // Pendiente (Gris)
+                        // Pendiente
                         seat.classList.add('occupied');
                         const val = data.pendingVal ? `$${data.pendingVal}` : '';
-                        // Aquí usamos "Saldo" en lugar de "Debe" para consistencia
                         if(val) {
                             badgeHTML = `<span class="payment-badge">Saldo: ${val}</span>`;
                         } else {
